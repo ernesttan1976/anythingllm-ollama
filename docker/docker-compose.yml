@@ -1,0 +1,89 @@
+version: '3.8'
+
+services:
+  anythingllm:
+    image: mintplexlabs/anythingllm
+    container_name: anythingllm
+    ports:
+      - "3001:3001"
+    cap_add:
+      - SYS_ADMIN
+    environment:
+      - STORAGE_DIR=/app/server/storage
+      - JWT_SECRET="make this a large list of random numbers and letters 20+"
+      - LLM_PROVIDER=ollama
+      - OLLAMA_BASE_PATH=http://ollama:11434
+      - OLLAMA_MODEL_PREF=llama2
+      - OLLAMA_MODEL_TOKEN_LIMIT=4096
+      - EMBEDDING_ENGINE=ollama
+      - EMBEDDING_BASE_PATH=http://ollama:11434
+      - EMBEDDING_MODEL_PREF=nomic-embed-text:latest
+      - EMBEDDING_MODEL_MAX_CHUNK_LENGTH=8192
+      - VECTOR_DB=lancedb
+      - WHISPER_PROVIDER=local
+      - TTS_PROVIDER=native
+      - PASSWORDMINCHAR=8
+    volumes:
+      - anythingllm_storage:/app/server/storage
+    networks:
+      - llm-network
+    depends_on:
+      - ollama
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - llm-network
+    restart: unless-stopped
+
+  model-loader:
+    image: ollama/ollama:latest
+    container_name: model-loader
+    depends_on:
+      - ollama
+    networks:
+      - llm-network
+    command: >
+      sh -c '
+        echo "Waiting for Ollama to start..."
+        while ! wget -q --spider http://ollama:11434/api/tags; do
+          sleep 5
+        done
+        echo "Ollama is ready. Loading models..."
+        ollama pull llama3.1
+        ollama pull nomic-embed-text:latest
+        ollama pull deepseek-r1
+        ollama pull llava
+        echo "Model loading complete"
+      '
+    restart: "no"
+
+volumes:
+  anythingllm_storage:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ~/raid/anything-llm/storage
+  ollama_data:
+    driver: local
+
+networks:
+  llm-network:
+    driver: bridge
