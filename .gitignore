@@ -9,3 +9,9 @@ v-env
 aws_cf_deploy_anything_llm.json
 yarn.lock
 *.bak
+**/sslcert/**
+**/*.pem
+storage
+**/comkey
+*.db
+storage/anythingllm.db
